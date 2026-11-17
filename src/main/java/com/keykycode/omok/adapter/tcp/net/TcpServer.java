@@ -21,7 +21,7 @@ public final class TcpServer {
 
     // accept 스레드 전용
     private long nextConnectionId = 1;
-    private int nextLoopIndex = 0;
+    private int nextIoWorkerIndex = 0;
 
     public TcpServer(int port, int ioThreads, ConnectionRegistry connectionRegistry,
                      ConnectionEvents connectionEvents, PacketDecoder packetDecoder, PacketEncoder packetEncoder) {
@@ -44,7 +44,7 @@ public final class TcpServer {
         }
 
         // accept 스레드
-        new Thread(this::acceptLoop, "accept").start();
+        new Thread(this::acceptConnections, "accept").start();
     }
 
 
@@ -53,7 +53,7 @@ public final class TcpServer {
         return serverSocketChannel.socket().getLocalPort();
     }
 
-    private void acceptLoop() {
+    private void acceptConnections() {
         while (true) {
 //            Socket socket;
             SocketChannel socketChannel;
@@ -69,9 +69,9 @@ public final class TcpServer {
 //            Connection connection = new Connection(nextConnectionId++, socket);
             Connection connection = new Connection(nextConnectionId++, socketChannel);
             connectionRegistry.addByConnectionId(connection);
-            ioWorkerList.get(nextLoopIndex).assign(connection);
+            ioWorkerList.get(nextIoWorkerIndex).assign(connection);
 
-            nextLoopIndex = (nextLoopIndex + 1) % ioWorkerList.size(); // -> 공평하게, 적은 커넥션 쪽으로, AtomicInteger
+            nextIoWorkerIndex = (nextIoWorkerIndex + 1) % ioWorkerList.size(); // -> 공평하게, 적은 커넥션 쪽으로, AtomicInteger
         }
     }
 }

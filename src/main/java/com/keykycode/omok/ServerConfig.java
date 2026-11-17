@@ -2,7 +2,7 @@ package com.keykycode.omok;
 
 public record ServerConfig(int port, int ioThreads, int roomThreads) {
     private static final int DEFAULT_PORT = 23456;
-    private static final int DEFAULT_IO_THREADS = 8;
+    private static final int DEFAULT_IO_THREADS = 1;
     private static final int DEFAULT_ROOM_THREADS = 8;
 
     /** 첫 번째 인자가 있으면 포트로 쓴다. */
