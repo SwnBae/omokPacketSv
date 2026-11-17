@@ -4,8 +4,9 @@ import com.keykycode.omok.adapter.tcp.codec.PacketDecoder;
 import com.keykycode.omok.adapter.tcp.codec.PacketEncoder;
 
 import java.io.IOException;
-import java.net.ServerSocket;
-import java.net.Socket;
+import java.net.InetSocketAddress;
+import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -13,9 +14,10 @@ public final class TcpServer {
 
     private final int port;
     private final ConnectionRegistry connectionRegistry;
-    private final List<IoLoop> loops = new ArrayList<>();
+    private final List<IoWorker> ioWorkerList = new ArrayList<>();
 
-    private ServerSocket serverSocket;
+//    private ServerSocket serverSocket;
+    private ServerSocketChannel serverSocketChannel;
 
     // accept 스레드 전용
     private long nextConnectionId = 1;
@@ -27,16 +29,18 @@ public final class TcpServer {
         this.connectionRegistry = connectionRegistry;
 
         for (int i = 0; i < ioThreads; i++) {
-            loops.add(new IoLoop(connectionEvents, packetDecoder, packetEncoder, connectionRegistry));
+            ioWorkerList.add(new IoWorker(connectionEvents, packetDecoder, packetEncoder, connectionRegistry));
         }
     }
 
     public void start() throws IOException {
-        serverSocket = new ServerSocket(port);
+//        serverSocket = new ServerSocket(port);
+        serverSocketChannel = ServerSocketChannel.open();
+        serverSocketChannel.bind(new InetSocketAddress(port));
 
         // IO 스레드
-        for (int i = 0; i < loops.size(); i++) {
-            new Thread(loops.get(i), "io-loop-" + i).start();
+        for (int i = 0; i < ioWorkerList.size(); i++) {
+            new Thread(ioWorkerList.get(i), "io-" + i).start();
         }
 
         // accept 스레드
@@ -45,24 +49,29 @@ public final class TcpServer {
 
 
     public int getPort() {
-        return serverSocket.getLocalPort();
+//        return serverSocket.getLocalPort();
+        return serverSocketChannel.socket().getLocalPort();
     }
 
     private void acceptLoop() {
         while (true) {
-            Socket socket;
+//            Socket socket;
+            SocketChannel socketChannel;
             try {
-                socket = serverSocket.accept();
+//                socket = serverSocket.accept();
+                socketChannel = serverSocketChannel.accept();
             } catch (IOException e) {
-                if (serverSocket.isClosed()) return;
+//                if (serverSocket.isClosed()) return;
+                if(!serverSocketChannel.isOpen()) return;
                 continue;
             }
 
-            Connection connection = new Connection(nextConnectionId++, socket);
+//            Connection connection = new Connection(nextConnectionId++, socket);
+            Connection connection = new Connection(nextConnectionId++, socketChannel);
             connectionRegistry.addByConnectionId(connection);
-            loops.get(nextLoopIndex).assign(connection);
+            ioWorkerList.get(nextLoopIndex).assign(connection);
 
-            nextLoopIndex = (nextLoopIndex + 1) % loops.size(); // -> 공평하게, 적은 커넥션 쪽으로, AtomicInteger
+            nextLoopIndex = (nextLoopIndex + 1) % ioWorkerList.size(); // -> 공평하게, 적은 커넥션 쪽으로, AtomicInteger
         }
     }
 }
