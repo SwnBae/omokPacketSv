@@ -32,9 +32,10 @@ public final class IoWorker implements Runnable {
     private final PacketEncoder encoder;
     private final ConnectionRegistry registry;
 
-    //    private final BlockingDeque<Connection> newConnections = new LinkedBlockingDeque<>();
+//    private final BlockingDeque<Connection> newConnections = new LinkedBlockingDeque<>();
 //    private final List<Connection> connections = new ArrayList<>();
 //    private int startIndex = 0;
+
     private final Selector selector = openSelector();
     private final Queue<Connection> writeRequests = new ConcurrentLinkedQueue<>();
     private final Queue<Connection> newConnections = new ConcurrentLinkedQueue<>();
@@ -153,7 +154,6 @@ public final class IoWorker implements Runnable {
                 }
             }
         }
-
 //        DecodeResult result = decode(connection);
 //
 //        if (result instanceof DecodeResult.Incomplete) {
