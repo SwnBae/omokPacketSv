@@ -25,8 +25,6 @@ import java.util.concurrent.LinkedBlockingDeque;
 @RequiredArgsConstructor
 public final class IoWorker implements Runnable {
 
-    private static final int READ_TIMEOUT_MILLIS = 1;
-
     private final ConnectionEvents events;
     private final PacketDecoder decoder;
     private final PacketEncoder encoder;
