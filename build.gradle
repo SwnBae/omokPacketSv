@@ -11,6 +11,8 @@ repositories {
 }
 
 dependencies {
+    implementation 'io.netty:netty-transport:4.2.17.Final'
+    implementation 'io.netty:netty-codec-base:4.2.17.Final'
     compileOnly 'org.projectlombok:lombok:1.18.48'
     annotationProcessor 'org.projectlombok:lombok:1.18.48'
 }
