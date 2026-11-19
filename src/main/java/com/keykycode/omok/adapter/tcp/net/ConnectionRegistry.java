@@ -10,7 +10,7 @@ public final class ConnectionRegistry {
     private final ConcurrentMap<Long, Connection> connectionsByPlayerId = new ConcurrentHashMap<>();
 
     /**
-     * 연결 번호 기준: accept 스레드가 등록, 담당 I/O 루프가 닫을 때 제거
+     * 연결 번호 기준: 연결을 담당하는 EventLoop(initChannel)가 등록, 같은 EventLoop가 닫힐 때 제거
      */
     public void addByConnectionId(Connection connection) {
         connectionsById.put(connection.getId(), connection);
