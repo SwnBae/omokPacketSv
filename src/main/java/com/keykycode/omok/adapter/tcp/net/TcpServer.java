@@ -2,76 +2,73 @@ package com.keykycode.omok.adapter.tcp.net;
 
 import com.keykycode.omok.adapter.tcp.codec.PacketDecoder;
 import com.keykycode.omok.adapter.tcp.codec.PacketEncoder;
+import io.netty.bootstrap.ServerBootstrap;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.MultiThreadIoEventLoopGroup;
+import io.netty.channel.nio.NioIoHandler;
+import io.netty.channel.socket.SocketChannel;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.nio.channels.ServerSocketChannel;
-import java.nio.channels.SocketChannel;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 
-public final class TcpServer {
+public class TcpServer {
 
     private final int port;
+    private final int ioThreads;
     private final ConnectionRegistry connectionRegistry;
-    private final List<IoWorker> ioWorkerList = new ArrayList<>();
+    private final ConnectionEvents connectionEvents;
+    private final PacketDecoder packetDecoder;
+    private final PacketEncoder packetEncoder;
 
-//    private ServerSocket serverSocket;
-    private ServerSocketChannel serverSocketChannel;
+    private final AtomicLong nextConnectionId = new AtomicLong(1);
+    private Channel serverChannel;
 
-    // accept 스레드 전용
-    private long nextConnectionId = 1;
-    private int nextIoWorkerIndex = 0;
-
-    public TcpServer(int port, int ioThreads, ConnectionRegistry connectionRegistry,
-                     ConnectionEvents connectionEvents, PacketDecoder packetDecoder, PacketEncoder packetEncoder) {
+    public TcpServer(int port, int ioThreads,
+                     ConnectionRegistry connectionRegistry,
+                     ConnectionEvents connectionEvents,
+                     PacketDecoder packetDecoder,
+                     PacketEncoder packetEncoder) {
         this.port = port;
+        this.ioThreads = ioThreads;
         this.connectionRegistry = connectionRegistry;
-
-        for (int i = 0; i < ioThreads; i++) {
-            ioWorkerList.add(new IoWorker(connectionEvents, packetDecoder, packetEncoder, connectionRegistry));
-        }
+        this.connectionEvents = connectionEvents;
+        this.packetDecoder = packetDecoder;
+        this.packetEncoder = packetEncoder;
     }
 
     public void start() throws IOException {
-//        serverSocket = new ServerSocket(port);
-        serverSocketChannel = ServerSocketChannel.open();
-        serverSocketChannel.bind(new InetSocketAddress(port));
+        EventLoopGroup bossGroup = new MultiThreadIoEventLoopGroup(1, NioIoHandler.newFactory());
+        EventLoopGroup workerGroup = new MultiThreadIoEventLoopGroup(ioThreads, NioIoHandler.newFactory());
 
-        // IO 스레드
-        for (int i = 0; i < ioWorkerList.size(); i++) {
-            new Thread(ioWorkerList.get(i), "io-" + i).start();
+        ServerBootstrap bootstrap = new ServerBootstrap()
+                .group(bossGroup, workerGroup)
+                .channel(NioServerSocketChannel.class)
+                .childHandler(new ChannelInitializer<SocketChannel>() {
+                    @Override
+                    protected void initChannel(SocketChannel ch) {
+                        Connection connection = new Connection(nextConnectionId.getAndIncrement(), ch);
+                        connectionRegistry.addByConnectionId(connection);
+                        ch.pipeline().addLast(
+                                new PacketFrameDecoder(packetDecoder, packetEncoder),
+                                new RequestHandler(connection, connectionEvents, connectionRegistry));
+                    }
+                });
+
+        ChannelFuture bindFuture = bootstrap.bind(port).awaitUninterruptibly();
+        if (!bindFuture.isSuccess()) {
+            bossGroup.shutdownGracefully();
+            workerGroup.shutdownGracefully();
+            throw new IOException("bind 실패: port=" + port, bindFuture.cause());
         }
-
-        // accept 스레드
-        new Thread(this::acceptConnections, "accept").start();
+        serverChannel = bindFuture.channel();
     }
-
 
     public int getPort() {
-//        return serverSocket.getLocalPort();
-        return serverSocketChannel.socket().getLocalPort();
-    }
-
-    private void acceptConnections() {
-        while (true) {
-//            Socket socket;
-            SocketChannel socketChannel;
-            try {
-//                socket = serverSocket.accept();
-                socketChannel = serverSocketChannel.accept();
-            } catch (IOException e) {
-//                if (serverSocket.isClosed()) return;
-                if(!serverSocketChannel.isOpen()) return;
-                continue;
-            }
-
-//            Connection connection = new Connection(nextConnectionId++, socket);
-            Connection connection = new Connection(nextConnectionId++, socketChannel);
-            connectionRegistry.addByConnectionId(connection);
-            ioWorkerList.get(nextIoWorkerIndex).assign(connection);
-
-            nextIoWorkerIndex = (nextIoWorkerIndex + 1) % ioWorkerList.size(); // -> 공평하게, 적은 커넥션 쪽으로, AtomicInteger
-        }
+        return ((InetSocketAddress) serverChannel.localAddress()).getPort();
     }
 }
