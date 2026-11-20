@@ -25,6 +25,7 @@ public class TcpServer {
     private final PacketDecoder packetDecoder;
     private final PacketEncoder packetEncoder;
 
+    // 기존 acceptThread에서 지정 -> Worker Thread에서 지정, 여러 스레드에서 다루기 때문에 Atomic으로 변경
     private final AtomicLong nextConnectionId = new AtomicLong(1);
     private Channel serverChannel;
 
@@ -51,6 +52,7 @@ public class TcpServer {
                 .childHandler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     protected void initChannel(SocketChannel ch) {
+                        // worker EventLoop 스레드에서 실행
                         Connection connection = new Connection(nextConnectionId.getAndIncrement(), ch);
                         connectionRegistry.addByConnectionId(connection);
                         ch.pipeline().addLast(
